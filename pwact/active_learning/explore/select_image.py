@@ -103,7 +103,7 @@ def select_image(
             else:
                 _lower = lower
                 _higer = higer
-            tmp_error_pd, tmp_accurate_pd, tmp_rand_candi, tmp_remove_candi = select_pd(tmp_devi_pd, _lower, _higer, select_num)
+            tmp_error_pd, tmp_accurate_pd, tmp_rand_candi, tmp_remove_candi = my_select_pd(tmp_devi_pd, _lower, _higer, select_num)
             error_pd = pd.concat([error_pd, tmp_error_pd]) if error_pd is not None else tmp_error_pd
             accurate_pd = pd.concat([accurate_pd, tmp_accurate_pd]) if error_pd is not None else tmp_accurate_pd
             rand_candi = pd.concat([rand_candi, tmp_rand_candi]) if error_pd is not None else tmp_rand_candi
@@ -128,6 +128,53 @@ def select_pd(devi_pd:DataFrame, lower:float, higer:float, max_select:float):
     cand_rand_candi = None
     if candidate_pd.shape[0] > max_select:
         cand_rand_candi = candidate_pd.sample(max_select)
+        cand_remove_candi = candidate_pd.drop(cand_rand_candi.index)
+    else:
+        cand_rand_candi = candidate_pd
+        cand_remove_candi = pd.DataFrame(columns=cand_rand_candi.columns)
+    return error_pd, accurate_pd, cand_rand_candi, cand_remove_candi
+
+def my_select_pd(devi_pd:DataFrame, lower:float, higer:float, max_select:float):
+    accurate_pd  = devi_pd[devi_pd[EXPLORE_FILE_STRUCTURE.devi_columns[0]] < lower]
+    candidate_pd = devi_pd[(devi_pd[EXPLORE_FILE_STRUCTURE.devi_columns[0]] >= lower) & (devi_pd[EXPLORE_FILE_STRUCTURE.devi_columns[0]] < higer)]
+    error_pd     = devi_pd[devi_pd[EXPLORE_FILE_STRUCTURE.devi_columns[0]] > higer]
+    #4. if selected images more than number limitaions, randomly select
+    cand_remove_candi = None
+    cand_rand_candi = None
+    if candidate_pd.shape[0] > max_select:
+        print("my_select_pd\n")
+        from ase.io import read
+        from scipy.spatial.distance import pdist, squareform
+        configs = [pdist(read('{}/traj/{}.lammpstrj'.format(row[EXPLORE_FILE_STRUCTURE.devi_columns[2]],
+            int(row[EXPLORE_FILE_STRUCTURE.devi_columns[1]]))).positions)
+              for index, row in candidate_pd.iterrows()]
+        
+        # 将成对距离矩阵转换为矩阵形式
+        configs = [squareform(i) for i in configs]
+        # 将每个矩阵的对角线元素设置为 2
+        for i in configs:
+            np.fill_diagonal(i, 2)
+        # 将每个矩阵的每个元素取倒数
+        configs = [1/i for i in configs]
+        # 计算每个矩阵的特征值
+        configs = [np.linalg.eigvals(i) for i in configs]
+        # 将特征值按照从绝对值大到小的顺序排列
+        configs = [i[np.argsort(np.abs(i))[::-1]] for i in configs]
+
+        X = np.array(configs)
+
+        # KMeans 聚类
+        from sklearn.cluster import KMeans
+        kmeans = KMeans(n_clusters=max_select)
+        kmeans.fit(X)
+
+        # 找到每个类中，距离中心最近的样本
+        from sklearn.metrics import pairwise_distances_argmin_min
+        centers = kmeans.cluster_centers_
+        closest, _ = pairwise_distances_argmin_min(centers, X)
+
+        cand_rand_candi = candidate_pd.iloc[closest]
+
         cand_remove_candi = candidate_pd.drop(cand_rand_candi.index)
     else:
         cand_rand_candi = candidate_pd

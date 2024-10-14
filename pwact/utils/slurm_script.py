@@ -8,7 +8,6 @@ GPU_SCRIPT_HEAD = \
 #SBATCH --nodes={}\n\
 #SBATCH --ntasks-per-node={}\n\
 #SBATCH --gres=gpu:{}\n\
-#SBATCH --gpus-per-task={}\n\
 #SBATCH --partition={}\n\
 \
 "
@@ -145,7 +144,7 @@ def set_slurm_script_content(
         if gpu_per_node is None or gpu_per_node == 0:
             script += CPU_SCRIPT_HEAD.format(job_name, number_node, cpu_per_node, queue_name)
         else:
-            script += GPU_SCRIPT_HEAD.format(job_name, number_node, cpu_per_node, gpu_per_node, 1, queue_name)
+            script += GPU_SCRIPT_HEAD.format(job_name, number_node, cpu_per_node, gpu_per_node, queue_name)
         
         for custom_flag in custom_flags:
             script += custom_flag + "\n"
